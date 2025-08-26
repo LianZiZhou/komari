@@ -22,7 +22,13 @@ var (
 	dbTypeEnv = GetEnv("KOMARI_DB_TYPE", "sqlite")
 	dbFileEnv = GetEnv("KOMARI_DB_FILE", "./data/komari.db")
 	dbHostEnv = GetEnv("KOMARI_DB_HOST", "localhost")
-	dbPortEnv = GetEnv("KOMARI_DB_PORT", "3306")
+	dbPortEnv = GetEnv("KOMARI_DB_PORT", func() string {
+		dbType := GetEnv("KOMARI_DB_TYPE", "sqlite")
+		if dbType == "postgres" || dbType == "postgresql" {
+			return "5432"
+		}
+		return "3306"
+	}())
 	dbUserEnv = GetEnv("KOMARI_DB_USER", "root")
 	dbPassEnv = GetEnv("KOMARI_DB_PASS", "")
 	dbNameEnv = GetEnv("KOMARI_DB_NAME", "komari")
@@ -48,7 +54,7 @@ func Execute() {
 
 func init() {
 	// 设置命令行参数，提供环境变量作为默认值
-	RootCmd.PersistentFlags().StringVarP(&flags.DatabaseType, "db-type", "t", dbTypeEnv, "Database type (sqlite, mysql) [env: KOMARI_DB_TYPE]")
+	RootCmd.PersistentFlags().StringVarP(&flags.DatabaseType, "db-type", "t", dbTypeEnv, "Database type (sqlite, mysql, postgres) [env: KOMARI_DB_TYPE]")
 	RootCmd.PersistentFlags().StringVarP(&flags.DatabaseFile, "database", "d", dbFileEnv, "SQLite database file path [env: KOMARI_DB_FILE]")
 	RootCmd.PersistentFlags().StringVar(&flags.DatabaseHost, "db-host", dbHostEnv, "MySQL/Other database host address [env: KOMARI_DB_HOST]")
 	RootCmd.PersistentFlags().StringVar(&flags.DatabasePort, "db-port", dbPortEnv, "MySQL/Other database port [env: KOMARI_DB_PORT]")
