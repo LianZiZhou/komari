@@ -122,7 +122,26 @@ func (sa *StringArray) Scan(value interface{}) error {
 			}
 		}
 
-		return fmt.Errorf("failed to parse StringArray: %v", v)
+		if strings.HasPrefix(v, "#(") {
+			endIdx := strings.LastIndex(v, ")")
+			if endIdx > 2 {
+				numStr := v[2:endIdx]
+				numStr = strings.ReplaceAll(numStr, "\n", " ")
+				parts := strings.Fields(numStr)
+				bytes := make([]byte, 0, len(parts))
+				for _, part := range parts {
+					var b int
+					if _, err := fmt.Sscanf(part, "%d", &b); err == nil && b >= 0 && b <= 255 {
+						bytes = append(bytes, byte(b))
+					}
+				}
+				if len(bytes) > 0 {
+					return json.Unmarshal(bytes, sa)
+				}
+			}
+		}
+
+		return fmt.Errorf("failed to parse StringArray, unknown format: %v", v)
 	default:
 		return fmt.Errorf("failed to scan StringArray: unsupported type %T", value)
 	}
