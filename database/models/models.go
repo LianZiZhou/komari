@@ -107,20 +107,38 @@ func (sa *StringArray) Scan(value interface{}) error {
 	case []byte:
 		return json.Unmarshal(v, sa)
 	case string:
+		// 先打印原始数据以便调试 (生产环境应该删除)
+		// fmt.Printf("StringArray Scan received: %q\n", v)
+
+		// 1. 尝试直接解析
 		err := json.Unmarshal([]byte(v), sa)
 		if err == nil {
 			return nil
 		}
 
-		// 如果失败，检查是否是因为 PostgreSQL 的双重转义问题
-		// 错误信息通常包含 "invalid character '\\'"
-		if strings.Contains(err.Error(), `invalid character '\'`) {
-			// 只处理 JSON 语法中的转义，而不是数据中的反斜杠
-			cleaned := strings.ReplaceAll(v, `\"`, `"`)
-			return json.Unmarshal([]byte(cleaned), sa)
+		// 2. 如果失败，可能是被双重编码的 JSON 字符串
+		var jsonStr string
+		if err2 := json.Unmarshal([]byte(v), &jsonStr); err2 == nil {
+			// 成功解析出字符串，再解析这个字符串为数组
+			return json.Unmarshal([]byte(jsonStr), sa)
 		}
 
-		return err
+		// 3. 处理 PostgreSQL 特殊的转义情况
+		// 有时 PostgreSQL 会返回类似 "[\"item1\",\"item2\"]" 的格式
+		if strings.HasPrefix(v, `"`) && strings.HasSuffix(v, `"`) {
+			// 去掉外层引号
+			unquoted := v[1 : len(v)-1]
+			// 处理转义的引号
+			unquoted = strings.ReplaceAll(unquoted, `\"`, `"`)
+			// 处理转义的反斜杠
+			unquoted = strings.ReplaceAll(unquoted, `\\`, `\`)
+			if err3 := json.Unmarshal([]byte(unquoted), sa); err3 == nil {
+				return nil
+			}
+		}
+
+		// 4. 如果都失败了，返回原始错误和数据供调试
+		return fmt.Errorf("failed to parse StringArray: %v (raw data: %q)", err, v)
 	default:
 		return fmt.Errorf("failed to scan StringArray: unsupported type %T", value)
 	}
