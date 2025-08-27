@@ -2,6 +2,7 @@ package models
 
 import (
 	"database/sql/driver"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -107,38 +108,21 @@ func (sa *StringArray) Scan(value interface{}) error {
 	case []byte:
 		return json.Unmarshal(v, sa)
 	case string:
-		// 先打印原始数据以便调试 (生产环境应该删除)
-		// fmt.Printf("StringArray Scan received: %q\n", v)
+		if strings.HasPrefix(v, `\x`) || strings.HasPrefix(v, `\\x`) {
+			hexStr := v
+			if strings.HasPrefix(v, `\\x`) {
+				hexStr = v[3:]
+			} else {
+				hexStr = v[2:]
+			}
 
-		// 1. 尝试直接解析
-		err := json.Unmarshal([]byte(v), sa)
-		if err == nil {
-			return nil
-		}
-
-		// 2. 如果失败，可能是被双重编码的 JSON 字符串
-		var jsonStr string
-		if err2 := json.Unmarshal([]byte(v), &jsonStr); err2 == nil {
-			// 成功解析出字符串，再解析这个字符串为数组
-			return json.Unmarshal([]byte(jsonStr), sa)
-		}
-
-		// 3. 处理 PostgreSQL 特殊的转义情况
-		// 有时 PostgreSQL 会返回类似 "[\"item1\",\"item2\"]" 的格式
-		if strings.HasPrefix(v, `"`) && strings.HasSuffix(v, `"`) {
-			// 去掉外层引号
-			unquoted := v[1 : len(v)-1]
-			// 处理转义的引号
-			unquoted = strings.ReplaceAll(unquoted, `\"`, `"`)
-			// 处理转义的反斜杠
-			unquoted = strings.ReplaceAll(unquoted, `\\`, `\`)
-			if err3 := json.Unmarshal([]byte(unquoted), sa); err3 == nil {
-				return nil
+			decoded, err := hex.DecodeString(hexStr)
+			if err == nil {
+				return json.Unmarshal(decoded, sa)
 			}
 		}
 
-		// 4. 如果都失败了，返回原始错误和数据供调试
-		return fmt.Errorf("failed to parse StringArray: %v (raw data: %q)", err, v)
+		return fmt.Errorf("failed to parse StringArray: %v", v)
 	default:
 		return fmt.Errorf("failed to scan StringArray: unsupported type %T", value)
 	}
