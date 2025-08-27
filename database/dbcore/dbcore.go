@@ -262,9 +262,15 @@ func GetDBInstance() *gorm.DB {
 			log.Printf("Using PostgreSQL database: %s@%s:%s/%s", flags.DatabaseUser, flags.DatabaseHost, flags.DatabasePort, flags.DatabaseName)
 
 			// 创建 longtext 域作为 text 的别名
-			if err := instance.Exec("CREATE DOMAIN IF NOT EXISTS longtext AS text").Error; err != nil {
-				// 忽略错误，因为域可能已经存在
-				log.Printf("Note: longtext domain may already exist: %v", err)
+			var exists bool
+			err = instance.Raw("SELECT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'longtext')").Scan(&exists).Error
+			if err == nil && !exists {
+				// 域不存在，创建它
+				if err := instance.Exec("CREATE DOMAIN longtext AS text").Error; err != nil {
+					log.Printf("Warning: Failed to create longtext domain: %v", err)
+				} else {
+					log.Println("Created longtext domain for PostgreSQL compatibility")
+				}
 			}
 
 		default:
