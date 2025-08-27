@@ -97,11 +97,19 @@ type Record struct {
 type StringArray []string
 
 func (sa *StringArray) Scan(value interface{}) error {
-	bytes, ok := value.([]byte)
-	if !ok {
-		return fmt.Errorf("failed to scan StringArray: value is not []byte")
+	if value == nil {
+		*sa = []string{}
+		return nil
 	}
-	return json.Unmarshal(bytes, sa)
+
+	switch v := value.(type) {
+	case []byte:
+		return json.Unmarshal(v, sa)
+	case string:
+		return json.Unmarshal([]byte(v), sa)
+	default:
+		return fmt.Errorf("failed to scan StringArray: unsupported type %T", value)
+	}
 }
 
 func (sa StringArray) Value() (driver.Value, error) {
