@@ -4,6 +4,7 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 // Client represents a registered client device
@@ -106,7 +107,20 @@ func (sa *StringArray) Scan(value interface{}) error {
 	case []byte:
 		return json.Unmarshal(v, sa)
 	case string:
-		return json.Unmarshal([]byte(v), sa)
+		err := json.Unmarshal([]byte(v), sa)
+		if err == nil {
+			return nil
+		}
+
+		// 如果失败，检查是否是因为 PostgreSQL 的双重转义问题
+		// 错误信息通常包含 "invalid character '\\'"
+		if strings.Contains(err.Error(), `invalid character '\'`) {
+			// 只处理 JSON 语法中的转义，而不是数据中的反斜杠
+			cleaned := strings.ReplaceAll(v, `\"`, `"`)
+			return json.Unmarshal([]byte(cleaned), sa)
+		}
+
+		return err
 	default:
 		return fmt.Errorf("failed to scan StringArray: unsupported type %T", value)
 	}
